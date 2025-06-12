@@ -1,0 +1,11 @@
+file,num_loops,num_instructions,num_blocks,num_temporaries,num_calls,num_constants
+BuscaBinária.ll,0,43,10,137,3,22
+BuscaLinear.ll,0,29,7,95,3,23
+ContaOcorrencia.ll,0,28,6,90,3,25
+FatorialRecursivo.ll,0,16,3,48,3,14
+FibonacciIterativo.ll,0,21,4,64,3,16
+MDC.ll,0,21,3,64,3,14
+OrdenaçãoBubble.ll,0,68,14,205,3,25
+PotenciaRecursivo.ll,0,21,3,63,3,15
+SomaElementos.ll,0,24,4,72,3,23
+VerificaPrimo.ll,0,26,12,98,3,17
