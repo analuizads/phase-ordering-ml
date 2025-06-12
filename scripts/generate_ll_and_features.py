@@ -48,13 +48,17 @@ for c_file in c_files:
     # Gera .ll se ainda não existir
     if not os.path.exists(ll_path):
         print(f"🔧 Gerando LLVM IR para: {c_file}")
-        cmd = ["clang", "-O0", "-S", "-emit-llvm", c_path, "-o", ll_path]
+        # Flag para remover o atributo optnone
+        cmd = [
+            "clang", "-O0", "-Xclang", "-disable-O0-optnone",
+            "-S", "-emit-llvm", c_path, "-o", ll_path
+        ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"Erro ao compilar {c_file}:\n{result.stderr}")
             continue
     else:
-        print(f"LVM IR já existe: {ll_file}")
+        print(f"LLVM IR já existe: {ll_file}")
 
     # Pula se já tem features no CSV
     if ll_file in processed_files:
@@ -93,4 +97,4 @@ for c_file in c_files:
 df_new = pd.DataFrame(features)
 df_final = pd.concat([df_existing, df_new]).drop_duplicates(subset=["file"])
 df_final.to_csv(CSV_PATH, index=False)
-
+print(f"Features salvas em {CSV_PATH} com {len(df_final)} entradas.")

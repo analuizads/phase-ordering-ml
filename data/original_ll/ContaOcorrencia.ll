@@ -6,7 +6,7 @@ target triple = "x86_64-pc-linux-gnu"
 @__const.main.v = private unnamed_addr constant [7 x i32] [i32 2, i32 3, i32 2, i32 5, i32 2, i32 3, i32 4], align 16
 @.str = private unnamed_addr constant [31 x i8] c"O n\C3\BAmero %d aparece %d vezes\0A\00", align 1
 
-; Function Attrs: noinline nounwind optnone uwtable
+; Function Attrs: noinline nounwind uwtable
 define dso_local i32 @contar(ptr noundef %0, i32 noundef %1, i32 noundef %2) #0 {
   %4 = alloca ptr, align 8
   %5 = alloca i32, align 4
@@ -56,7 +56,7 @@ define dso_local i32 @contar(ptr noundef %0, i32 noundef %1, i32 noundef %2) #0 
   ret i32 %29
 }
 
-; Function Attrs: noinline nounwind optnone uwtable
+; Function Attrs: noinline nounwind uwtable
 define dso_local i32 @main() #0 {
   %1 = alloca i32, align 4
   %2 = alloca [7 x i32], align 16
@@ -77,7 +77,7 @@ declare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, ptr noalias
 
 declare i32 @printf(ptr noundef, ...) #2
 
-attributes #0 = { noinline nounwind optnone uwtable "frame-pointer"="all" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #0 = { noinline nounwind uwtable "frame-pointer"="all" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #1 = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
 attributes #2 = { "frame-pointer"="all" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 

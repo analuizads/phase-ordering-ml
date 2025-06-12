@@ -15,7 +15,7 @@ df_met["pass_order"] = df_met["file"].apply(
     lambda x: x.split("__")[1].replace(".ll", "") if "__" in x else ""
 )
 
-# Faz merge entre métricas (otimizadas) e features (originais)
+# Faz merge entre métricas e features
 df = pd.merge(df_met, df_feat, left_on="base_file", right_on="file", suffixes=("_opt", "_orig"))
 
 # Ajusta colunas finais
