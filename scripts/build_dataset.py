@@ -9,7 +9,7 @@ OUTPUT_CSV = "data/dataset.csv"
 df_feat = pd.read_csv(FEATURES_CSV)
 df_met = pd.read_csv(METRICS_CSV)
 
-# Extrai nome base (ex: BuscaBinária.ll) e a ordem dos passes
+# Extrai nome base e a ordem dos passes
 df_met["base_file"] = df_met["file"].apply(lambda x: os.path.basename(x.split("/")[0] + ".ll"))
 df_met["pass_order"] = df_met["file"].apply(
     lambda x: x.split("__")[1].replace(".ll", "") if "__" in x else ""

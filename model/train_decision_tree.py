@@ -1,68 +1,117 @@
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeRegressor, plot_tree
-from sklearn.metrics import mean_absolute_error, r2_score
-import matplotlib.pyplot as plt
 import os
+import pandas as pd
+import joblib
+import matplotlib.pyplot as plt
 
-# Caminho para o dataset
-DATASET_PATH = "data/dataset.csv"
+from sklearn.model_selection import train_test_split, KFold, cross_val_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, r2_score
 
-# Métricas a serem previstas
-TARGETS = ["num_instructions_opt", "binary_size", "num_instructions_removed", "num_load_store"]
-
-# Lê o dataset
-df = pd.read_csv(DATASET_PATH)
-
-# Separa os passes (pass_order) em colunas distintas
-df[["pass_1", "pass_2", "pass_3", "pass_4", "pass_5", "pass_6"]] = df["pass_order"].str.split("_", expand=True)
-
-# Define features numéricas (vindas do .ll original)
-numeric_features = [
+# --- Configurações ---
+DATASET_PATH     = "data/dataset.csv"
+TARGETS          = [
+    "num_instructions_opt",
+    "binary_size",
+    "num_instructions_removed",
+    "num_load_store"
+]
+NUMERIC_FEATURES = [
     "num_loops", "num_instructions", "num_blocks",
     "num_temporaries", "num_calls", "num_constants"
 ]
+N_ESTIMATORS     = 200
+RANDOM_STATE     = 42
 
-# Faz one-hot encoding dos passes
-df_encoded = pd.get_dummies(df[["pass_1", "pass_2", "pass_3", "pass_4", "pass_5", "pass_6"]])
+# --- Carrega e prepara dados ---
+df = pd.read_csv(DATASET_PATH)
 
-# Junta features
-X = pd.concat([df[numeric_features], df_encoded], axis=1)
+# Garante 6 passes, mesmo que alguns estejam faltando ou vazios
+raw_splits = df["pass_order"].fillna("").str.split("_")
+# Padroniza cada lista para ter exatamente 6 elementos
+splits_fixed = raw_splits.apply(lambda lst: (lst + ["NONE"] * 6)[:6])
+# Transforma em DataFrame com colunas pass_1 ... pass_6
+passes = pd.DataFrame(
+    splits_fixed.tolist(),
+    columns=[f"pass_{i+1}" for i in range(6)],
+    index=df.index
+)
+# Junta ao df principal
+df = pd.concat([df, passes], axis=1)
 
-# Cria diretório para salvar os gráficos
+# One-hot encoding dos passes
+df_passes = pd.get_dummies(
+    df[[f"pass_{i+1}" for i in range(6)]],
+    prefix_sep="="
+)
+
+# Monta X final
+X = pd.concat([df[NUMERIC_FEATURES], df_passes], axis=1)
+
+# Cria diretórios de saída
+os.makedirs("model/rf", exist_ok=True)
 os.makedirs("model/figs", exist_ok=True)
 
-
 for target in TARGETS:
-
     y = df[target]
+    print(f"\n=== Treinando RandomForest para: {target} ===")
 
-    print(f"\n Treinando modelo para prever: {target}")
-    print("\n Exemplo de entrada (X):")
-    print(X.head())
-    print("\n Exemplo de saída (y):")
-    print(y.head())
+    # Split treino / teste
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_STATE
+    )
 
-    # Divide em treino e teste
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Inicializa e treina
+    rf = RandomForestRegressor(
+        n_estimators=N_ESTIMATORS,
+        min_samples_leaf=2,
+        oob_score=True,
+        random_state=RANDOM_STATE,
+        n_jobs=-1
+    )
+    rf.fit(X_train, y_train)
 
-    # Treina árvore de decisão
-    model = DecisionTreeRegressor(random_state=42, max_depth=5)
-    model.fit(X_train, y_train)
+    # Avaliação hold-out
+    y_pred = rf.predict(X_test)
+    mae    = mean_absolute_error(y_test, y_pred)
+    r2     = r2_score(y_test, y_pred)
+    print(f"Hold-out MAE: {mae:.4f} │ R²: {r2:.4f} │ OOB R²: {rf.oob_score_:.4f}")
 
-    # Faz predições
-    y_pred = model.predict(X_test)
+    # Avaliação 5-fold CV
+    kf     = KFold(5, shuffle=True, random_state=RANDOM_STATE)
+    cv_mae = -cross_val_score(rf, X, y, cv=kf,
+                              scoring="neg_mean_absolute_error",
+                              n_jobs=-1)
+    cv_r2  = cross_val_score(rf, X, y, cv=kf,
+                              scoring="r2",
+                              n_jobs=-1)
+    print(f"CV MAE: {cv_mae.mean():.4f} ± {cv_mae.std():.4f}")
+    print(f"CV R² : {cv_r2.mean():.4f} ± {cv_r2.std():.4f}")
 
-    # Avaliação
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    print(f"Erro absoluto médio (MAE): {mae:.4f}")
-    print(f"Coeficiente R²: {r2:.4f}")
+    # --- Gráfico 1: Top-10 feature importances ---
+    importances = pd.Series(rf.feature_importances_, index=X.columns)
+    top10       = importances.nlargest(10)
+    plt.figure(figsize=(8, 6))
+    plt.bar(top10.index, top10.values)
+    plt.xticks(rotation=45, ha="right")
+    plt.title(f"Top10 Features para {target}")
+    plt.tight_layout()
+    fn1 = f"model/figs/featimp_{target}.png"
+    plt.savefig(fn1); plt.close()
+    print(f"Salvo: {fn1}")
 
-    # Salva visualização da árvore
-    plt.figure(figsize=(20, 10))
-    plot_tree(model, filled=True, feature_names=X.columns, max_depth=2, fontsize=8)
-    fig_path = f"model/figs/tree_{target}.png"
-    plt.savefig(fig_path)
-    plt.close()
-    print(f"Árvore salva em {fig_path}")
+    # --- Gráfico 2: Real × Predito ---
+    plt.figure(figsize=(6, 6))
+    plt.scatter(y_test, y_pred, alpha=0.6)
+    mn, mx = y_test.min(), y_test.max()
+    plt.plot([mn, mx], [mn, mx], "--")
+    plt.xlabel("Valor Real")
+    plt.ylabel("Valor Predito")
+    plt.title(f"Real × Predito para {target}")
+    plt.tight_layout()
+    fn2 = f"model/figs/realvspred_{target}.png"
+    plt.savefig(fn2); plt.close()
+    print(f"Salvo: {fn2}")
+
+    # Salva o modelo
+    joblib.dump(rf, f"model/rf/rf_{target}.joblib")
+    print(f"Modelo salvo em model/rf/rf_{target}.joblib")
