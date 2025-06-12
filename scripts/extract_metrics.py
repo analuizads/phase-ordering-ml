@@ -1,77 +1,84 @@
 import os
-import subprocess
 import re
+import subprocess
 import pandas as pd
 
-OPT_LL_DIR = "data/optimized_ll"
+ORIGINAL_DIR = "data/original_ll"
+OPTIMIZED_DIR = "data/optimized_ll"
 CSV_PATH = "data/metrics.csv"
 
-# Cria a pasta se não existir
-os.makedirs(OPT_LL_DIR, exist_ok=True)
-
-# Carrega CSV existente ou inicia um novo
+# Inicia ou carrega CSV
 if os.path.exists(CSV_PATH):
     df_existing = pd.read_csv(CSV_PATH)
-    processed_files = set(df_existing["file"].tolist())
-    print(f"CSV existente encontrado com {len(df_existing)} entradas.")
+    processed = set(df_existing["file"])
+    print(f"CSV existente com {len(df_existing)} entradas.")
 else:
     df_existing = pd.DataFrame(columns=[
-        "file", "num_loops", "num_instructions", "num_blocks",
-        "num_temporaries", "num_calls", "num_constants"
+        "file", "binary_size", "num_instructions_opt",
+        "num_instructions_removed", "num_load_store"
     ])
-    processed_files = set()
-    print("Nenhum CSV encontrado. Criando novo.")
+    processed = set()
+    print(" Nenhum CSV encontrado. Criando novo.")
 
 metrics = []
 
-# Busca recursiva nos subdiretórios
-for root, dirs, files in os.walk(OPT_LL_DIR):
-    for file in files:
-        if not file.endswith(".ll"):
+for program in os.listdir(OPTIMIZED_DIR):
+    prog_path = os.path.join(OPTIMIZED_DIR, program)
+    if not os.path.isdir(prog_path):
+        continue
+
+    for opt_file in os.listdir(prog_path):
+        if not opt_file.endswith(".ll"):
             continue
 
-        full_path = os.path.join(root, file)
-        relative_path = os.path.relpath(full_path, OPT_LL_DIR)
+        full_path = os.path.join(prog_path, opt_file)
+        id_name = f"{program}/{opt_file}"
 
-        if relative_path in processed_files:
-            print(f"Já processado: {relative_path}")
+        if id_name in processed:
+            print(f" Já processado: {id_name}")
             continue
 
-        # Loop analysis
         try:
-            output = subprocess.check_output(
-                ["opt", "-loops", "-analyze", full_path],
-                stderr=subprocess.DEVNULL
-            ).decode()
-            num_loops = output.count("Loop at depth")
-        except Exception:
-            num_loops = 0
+            # Leitura do conteúdo otimizado
+            with open(full_path, "r") as f:
+                opt_content = f.read()
 
-        # Leitura e análise textual do .ll
-        with open(full_path, "r") as f:
-            content = f.read()
+            # Contagem total de instruções otimizado
+            instr_opt = len(re.findall(r"^\s*%[a-zA-Z0-9_.]+\s*=", opt_content, re.MULTILINE))
 
-        num_blocks = len(re.findall(r"^[a-zA-Z0-9_.]+:", content, re.MULTILINE))
-        num_instr = len(re.findall(r"^\s*%[a-zA-Z0-9_.]+[ ]*=", content, re.MULTILINE))
-        num_tmp = len(re.findall(r"%[0-9]+", content))
-        num_calls = len(re.findall(r"\bcall\b", content))
-        num_const_int = len(re.findall(r"i(8|16|32|64) [-]?[0-9]+", content))
-        num_const_float = len(re.findall(r"float [-]?[0-9]+\.[0-9]+", content))
-        num_const = num_const_int + num_const_float
+            # Contagem de load + store
+            num_loads = len(re.findall(r"\bload\b", opt_content))
+            num_stores = len(re.findall(r"\bstore\b", opt_content))
+            num_load_store = num_loads + num_stores
 
-        metrics.append({
-            "file": relative_path,
-            "num_loops": num_loops,
-            "num_instructions": num_instr,
-            "num_blocks": num_blocks,
-            "num_temporaries": num_tmp,
-            "num_calls": num_calls,
-            "num_constants": num_const
-        })
+            # Arquivo original para contar instruções iniciais
+            base_file = opt_file.split("__")[0] + ".ll"
+            orig_path = os.path.join(ORIGINAL_DIR, base_file)
+            with open(orig_path, "r") as f:
+                orig_content = f.read()
 
-# Atualiza o CSV
+            instr_orig = len(re.findall(r"^\s*%[a-zA-Z0-9_.]+\s*=", orig_content, re.MULTILINE))
+            instr_removed = instr_orig - instr_opt
+
+            # Compila para binário e mede tamanho
+            binary_out = "temp.out"
+            subprocess.run(["clang", full_path, "-o", binary_out], check=True, capture_output=True)
+            bin_size = os.path.getsize(binary_out)
+            os.remove(binary_out)
+
+            # Adiciona entrada
+            metrics.append({
+                "file": id_name,
+                "binary_size": bin_size,
+                "num_instructions_opt": instr_opt,
+                "num_instructions_removed": instr_removed,
+                "num_load_store": num_load_store
+            })
+        except Exception as e:
+            print(f" Erro em {id_name}: {e}")
+
+# Salva
 df_new = pd.DataFrame(metrics)
 df_final = pd.concat([df_existing, df_new]).drop_duplicates(subset=["file"])
 df_final.to_csv(CSV_PATH, index=False)
-
 print(f"\n Métricas salvas em: {CSV_PATH}")
